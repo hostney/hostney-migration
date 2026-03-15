@@ -1,0 +1,333 @@
+/* Hostney Migration Plugin - Admin Styles
+ * Design tokens from Hostney control panel (IBM Plex Sans, Ellie orange palette)
+ */
+
+/* ─── Font ─── */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+/* ─── Reset WP admin defaults within our container ─── */
+.hostney-page-heading,
+.hostney-page-heading *,
+#hostney-migration-container,
+#hostney-migration-container * {
+    box-sizing: border-box;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#hostney-migration-container {
+    max-width: 680px;
+}
+
+/* ─── Page heading ─── */
+.hostney-page-heading {
+    margin: 20px 0 24px;
+    padding: 0;
+}
+
+.hostney-page-heading h1 {
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-size: 16px !important;
+    font-weight: 400 !important;
+    color: #16191f;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.3;
+}
+
+.hostney-brand {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    position: relative;
+}
+
+.hostney-brand-subtitle {
+    font-weight: 400;
+    color: #656871;
+}
+
+/* ─── Cards ─── */
+.hostney-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+}
+
+.hostney-card h2 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #16191f;
+    letter-spacing: -0.01em;
+}
+
+.hostney-card > p {
+    margin: 0 0 16px;
+    font-size: 13.5px;
+    color: #656871;
+    line-height: 1.5;
+}
+
+/* ─── Form elements ─── */
+.hostney-form-group {
+    margin-bottom: 20px;
+}
+
+.hostney-form-group label {
+    display: block;
+    font-weight: 500;
+    font-size: 13px;
+    color: #16191f;
+    margin-bottom: 6px;
+}
+
+.hostney-form-group input[type="text"] {
+    width: 100%;
+    font-family: 'IBM Plex Sans', monospace;
+    font-size: 13px;
+    padding: 9px 12px;
+    border: 1px solid #8c8c94;
+    border-radius: 6px;
+    color: #16191f;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.hostney-form-group input[type="text"]:focus {
+    border-color: #ff9500;
+    box-shadow: 0 0 0 2px rgba(255, 149, 0, 0.15);
+}
+
+.hostney-form-group input[type="text"]::placeholder {
+    color: #b4b4bb;
+}
+
+/* ─── Buttons ─── */
+.hostney-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s, box-shadow 0.15s;
+    line-height: 1.4;
+    text-decoration: none;
+}
+
+.hostney-btn:focus-visible {
+    outline: 2px solid #ff9500;
+    outline-offset: 2px;
+}
+
+.hostney-btn-primary {
+    background: #ff9500;
+    color: #fff;
+}
+
+.hostney-btn-primary:hover {
+    background: #e68600;
+}
+
+.hostney-btn-primary:active {
+    background: #cc7600;
+}
+
+.hostney-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.hostney-btn-outline {
+    background: transparent;
+    color: #d63638;
+    border: 1px solid #d63638;
+}
+
+.hostney-btn-outline:hover {
+    background: #fcf0f1;
+}
+
+/* ─── Alerts ─── */
+.hostney-error {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #b91c1c;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.hostney-success {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    color: #15803d;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ─── Connected status ─── */
+.hostney-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    font-weight: 500;
+    margin-bottom: 14px;
+}
+
+.hostney-status-badge-connected {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.hostney-status-badge-connected::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background: #22c55e;
+    border-radius: 50%;
+}
+
+/* ─── Info box ─── */
+.hostney-info-box {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 13px;
+    color: #545b64;
+    line-height: 1.6;
+}
+
+.hostney-info-box strong {
+    color: #16191f;
+    font-weight: 600;
+}
+
+.hostney-info-box ol {
+    margin: 10px 0 0 0;
+    padding-left: 20px;
+}
+
+.hostney-info-box li {
+    margin-bottom: 4px;
+}
+
+/* ─── Divider ─── */
+.hostney-divider {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 20px 0;
+}
+
+/* ─── Disconnect section ─── */
+.hostney-disconnect-hint {
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    color: #656871;
+    line-height: 1.5;
+}
+
+/* ─── System checks table ─── */
+.hostney-checks-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.hostney-checks-table td {
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.hostney-checks-table tr:last-child td {
+    border-bottom: none;
+}
+
+.hostney-checks-table td:first-child {
+    font-weight: 500;
+    color: #16191f;
+    width: 160px;
+}
+
+.hostney-checks-table td:last-child {
+    color: #545b64;
+}
+
+.hostney-check-pass {
+    color: #15803d;
+}
+
+.hostney-check-pass::before {
+    content: "\2713\00a0";
+    font-weight: 700;
+}
+
+.hostney-check-fail {
+    color: #b91c1c;
+}
+
+.hostney-check-fail::before {
+    content: "\2717\00a0";
+    font-weight: 700;
+}
+
+.hostney-check-warn {
+    color: #a16207;
+}
+
+.hostney-check-warn::before {
+    content: "\26A0\00a0";
+}
+
+/* ─── Spinner ─── */
+.hostney-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 149, 0, 0.2);
+    border-top-color: #ff9500;
+    border-radius: 50%;
+    animation: hostney-spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+
+@keyframes hostney-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ─── Gradient accent bar ─── */
+.hostney-card-accent {
+    position: relative;
+    overflow: hidden;
+}
+
+.hostney-card-accent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #22c55e, #14b8a6, #3b82f6);
+    border-radius: 10px 10px 0 0;
+}
