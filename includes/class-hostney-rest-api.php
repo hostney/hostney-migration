@@ -97,7 +97,7 @@ class Hostney_REST_API {
         $limit   = intval( $request->get_param( 'limit' ) );
 
         if ( empty( $table ) ) {
-            return new WP_Error( 'missing_table', 'Table name is required.', array( 'status' => 400 ) );
+            return new WP_Error( 'missing_table', __( 'Table name is required.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         if ( $limit <= 0 || $limit > 5000 ) {
@@ -121,14 +121,15 @@ class Hostney_REST_API {
             } catch ( \Throwable $e ) {
                 // On memory or fatal errors, halve the batch size and retry
                 if ( $limit <= 50 ) {
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional server-side logging for migration export failures
                     error_log( '[Hostney Migration] Row export error: ' . $e->getMessage() );
-                    return new WP_Error( 'export_error', 'Failed to export rows.', array( 'status' => 500 ) );
+                    return new WP_Error( 'export_error', __( 'Failed to export rows.', 'hostney-migration' ), array( 'status' => 500 ) );
                 }
                 $limit = intval( $limit / 2 );
             }
         }
 
-        return new WP_Error( 'export_error', 'Failed to export rows after reducing batch size.', array( 'status' => 500 ) );
+        return new WP_Error( 'export_error', __( 'Failed to export rows after reducing batch size.', 'hostney-migration' ), array( 'status' => 500 ) );
     }
 
     /**
@@ -156,7 +157,7 @@ class Hostney_REST_API {
         $length    = intval( $request->get_param( 'length' ) );
 
         if ( empty( $file_path ) ) {
-            return new WP_Error( 'missing_path', 'File path is required.', array( 'status' => 400 ) );
+            return new WP_Error( 'missing_path', __( 'File path is required.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         if ( $length <= 0 || $length > 5242880 ) { // Max 5MB

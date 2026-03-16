@@ -20,11 +20,13 @@ class Hostney_Metadata {
         global $wpdb;
 
         // Count tables
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time metadata read, caching not applicable
         $tables = $wpdb->get_col( 'SHOW TABLES' );
         $total_tables = count( $tables );
 
         // Calculate total DB size
         $total_db_size = 0;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time metadata read, caching not applicable
         $table_status = $wpdb->get_results( 'SHOW TABLE STATUS', ARRAY_A );
         foreach ( $table_status as $table ) {
             $total_db_size += intval( $table['Data_length'] ) + intval( $table['Index_length'] );

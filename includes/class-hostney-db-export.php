@@ -22,6 +22,7 @@ class Hostney_DB_Export {
         global $wpdb;
 
         $tables = array();
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- migration export, caching not applicable
         $results = $wpdb->get_results( 'SHOW TABLE STATUS', ARRAY_A );
 
         if ( empty( $results ) ) {
@@ -35,10 +36,14 @@ class Hostney_DB_Export {
             $primary_key = $this->get_primary_key( $table_name );
 
             // Get CREATE TABLE statement
+            // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange -- reading schema for export, not modifying it
+            // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder -- %1s is intentional for identifier (table name)
             $create_result = $wpdb->get_row(
                 $wpdb->prepare( 'SHOW CREATE TABLE `%1s`', $table_name ),
                 ARRAY_A
             );
+            // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+            // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder
             $create_statement = isset( $create_result['Create Table'] ) ? $create_result['Create Table'] : null;
 
             $tables[] = array(
@@ -65,24 +70,26 @@ class Hostney_DB_Export {
     public function get_rows( $table, $last_id = 0, $limit = 1000 ) {
         global $wpdb;
 
-        // Try to extend execution time for large exports
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- required for large table exports on shared hosting with short max_execution_time
         @set_time_limit( 120 );
 
         // Defense in depth: reject table names with unexpected characters
         if ( ! preg_match( '/^[a-zA-Z0-9_]+$/', $table ) ) {
             return new WP_Error(
                 'invalid_table',
-                'Invalid table name.',
+                __( 'Invalid table name.', 'hostney-migration' ),
                 array( 'status' => 400 )
             );
         }
 
         // Validate table name against actual tables to prevent SQL injection
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- required for table validation each request
         $valid_tables = $wpdb->get_col( 'SHOW TABLES' );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         if ( ! in_array( $table, $valid_tables, true ) ) {
             return new WP_Error(
                 'invalid_table',
-                'Table not found.',
+                __( 'Table not found.', 'hostney-migration' ),
                 array( 'status' => 400 )
             );
         }
@@ -90,10 +97,14 @@ class Hostney_DB_Export {
         $primary_key = $this->get_primary_key( $table );
 
         // Get column names
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- migration export, caching not applicable
+        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder -- %1s is intentional for identifier (table name)
         $columns_result = $wpdb->get_results(
             $wpdb->prepare( 'SHOW COLUMNS FROM `%1s`', $table ),
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder
         $columns = wp_list_pluck( $columns_result, 'Field' );
 
         // Identify binary/blob columns for base64 encoding
@@ -105,9 +116,19 @@ class Hostney_DB_Export {
             }
         }
 
-        // Fetch rows using primary key pagination
+        // Fetch rows using primary key pagination.
+        //
+        // Table and column names are interpolated into the SQL string because
+        // $wpdb->prepare() does not support identifier placeholders. Both values
+        // are validated before reaching this point:
+        //   1. $table passes a strict regex check (/^[a-zA-Z0-9_]+$/) on line 72
+        //   2. $table is verified against the SHOW TABLES allowlist on line 82
+        //   3. $primary_key comes from SHOW COLUMNS output for the validated table
+        //
+        // All user-supplied values (last_id, limit) use %d placeholders via prepare().
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- migration export, caching not applicable
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table and $primary_key validated above (regex + allowlist)
         if ( $primary_key && $last_id > 0 ) {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM `{$table}` WHERE `{$primary_key}` > %d ORDER BY `{$primary_key}` ASC LIMIT %d",
@@ -117,7 +138,6 @@ class Hostney_DB_Export {
                 ARRAY_A
             );
         } elseif ( $primary_key ) {
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM `{$table}` ORDER BY `{$primary_key}` ASC LIMIT %d",
@@ -127,7 +147,6 @@ class Hostney_DB_Export {
             );
         } else {
             // No primary key - use LIMIT/OFFSET (less efficient but necessary)
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT * FROM `{$table}` LIMIT %d OFFSET %d",
@@ -137,13 +156,16 @@ class Hostney_DB_Export {
                 ARRAY_A
             );
         }
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
         if ( $wpdb->last_error ) {
             // Log the actual error server-side, but don't expose it in the response
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional server-side logging for migration export failures
             error_log( '[Hostney Migration] DB export error on table ' . sanitize_text_field( $table ) . ': ' . $wpdb->last_error );
             return new WP_Error(
                 'db_error',
-                'Database query failed.',
+                __( 'Database query failed.', 'hostney-migration' ),
                 array( 'status' => 500 )
             );
         }
@@ -194,10 +216,14 @@ class Hostney_DB_Export {
     private function get_primary_key( $table ) {
         global $wpdb;
 
+        // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- migration export, caching not applicable
+        // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder -- %1s is intentional for identifier (table name)
         $columns = $wpdb->get_results(
             $wpdb->prepare( 'SHOW COLUMNS FROM `%1s`', $table ),
             ARRAY_A
         );
+        // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:enable WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder
 
         foreach ( $columns as $col ) {
             if ( $col['Key'] === 'PRI' ) {

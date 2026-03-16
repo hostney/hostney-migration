@@ -24,7 +24,7 @@ class Hostney_Auth {
         if ( empty( $stored_token ) ) {
             return new WP_Error(
                 'hostney_no_token',
-                'No migration token configured.',
+                __( 'No migration token configured.', 'hostney-migration' ),
                 array( 'status' => 403 )
             );
         }
@@ -37,16 +37,24 @@ class Hostney_Auth {
         if ( empty( $token ) || empty( $timestamp ) || empty( $signature ) ) {
             return new WP_Error(
                 'hostney_missing_headers',
-                'Missing authentication headers.',
+                __( 'Missing authentication headers.', 'hostney-migration' ),
                 array( 'status' => 401 )
             );
+        }
+
+        // Rate limit: 900 requests per minute per IP.
+        // The Hostney worker runs at ~10 req/s sequential (100ms delay), so ~600/min typical.
+        // 900 leaves headroom for retries without throttling the worker.
+        $rate_check = self::check_rate_limit();
+        if ( is_wp_error( $rate_check ) ) {
+            return $rate_check;
         }
 
         // Validate token matches
         if ( ! hash_equals( $stored_token, $token ) ) {
             return new WP_Error(
                 'hostney_invalid_token',
-                'Invalid migration token.',
+                __( 'Invalid migration token.', 'hostney-migration' ),
                 array( 'status' => 401 )
             );
         }
@@ -58,7 +66,7 @@ class Hostney_Auth {
         if ( abs( $current_time - $request_time ) > 300 ) {
             return new WP_Error(
                 'hostney_expired_timestamp',
-                'Request timestamp expired.',
+                __( 'Request timestamp expired.', 'hostney-migration' ),
                 array( 'status' => 401 )
             );
         }
@@ -73,7 +81,7 @@ class Hostney_Auth {
             if ( $original_json === false ) {
                 return new WP_Error(
                     'hostney_invalid_body',
-                    'Invalid base64 body encoding.',
+                    __( 'Invalid base64 body encoding.', 'hostney-migration' ),
                     array( 'status' => 400 )
                 );
             }
@@ -98,11 +106,40 @@ class Hostney_Auth {
         if ( ! hash_equals( $expected_signature, $signature ) ) {
             return new WP_Error(
                 'hostney_invalid_signature',
-                'Invalid request signature.',
+                __( 'Invalid request signature.', 'hostney-migration' ),
                 array( 'status' => 401 )
             );
         }
 
+        return true;
+    }
+
+    /**
+     * Simple per-IP rate limiter using WordPress transients.
+     * Allows 900 requests per 60-second window.
+     *
+     * @return true|WP_Error
+     */
+    private static function check_rate_limit() {
+        $ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown';
+        $key = 'hostney_mig_rl_' . md5( $ip );
+
+        $count = get_transient( $key );
+
+        if ( false === $count ) {
+            set_transient( $key, 1, 60 );
+            return true;
+        }
+
+        if ( $count >= 900 ) {
+            return new WP_Error(
+                'hostney_rate_limited',
+                __( 'Too many requests. Please try again later.', 'hostney-migration' ),
+                array( 'status' => 429 )
+            );
+        }
+
+        set_transient( $key, $count + 1, 60 );
         return true;
     }
 }

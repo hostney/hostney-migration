@@ -1,7 +1,6 @@
 <?php
 /**
  * Plugin Name: Hostney Migration
- * Plugin URI: https://www.hostney.com
  * Description: Migrate your WordPress site to Hostney hosting. Paste your migration token and the Hostney worker will pull your data automatically.
  * Version: 1.0.0
  * Author: Hostney
@@ -68,13 +67,13 @@ class Hostney_Migration {
         // Check PHP version
         if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
             deactivate_plugins( plugin_basename( __FILE__ ) );
-            wp_die( 'Hostney Migration requires PHP 7.4 or later.' );
+            wp_die( esc_html__( 'Hostney Migration requires PHP 7.4 or later.', 'hostney-migration' ) );
         }
 
         // Check required extensions
         if ( ! function_exists( 'hash_hmac' ) ) {
             deactivate_plugins( plugin_basename( __FILE__ ) );
-            wp_die( 'Hostney Migration requires the hash extension.' );
+            wp_die( esc_html__( 'Hostney Migration requires the hash extension.', 'hostney-migration' ) );
         }
     }
 
@@ -162,6 +161,14 @@ class Hostney_Migration {
             'restUrl'  => rest_url( 'hostney-migrate/v1/' ),
             'apiBase'  => HOSTNEY_MIGRATION_API_BASE,
             'siteUrl'  => get_option( 'siteurl' ),
+            'i18n'     => array(
+                'invalidToken'     => __( 'Please enter a valid 96-character migration token.', 'hostney-migration' ),
+                'connecting'       => __( 'Connecting...', 'hostney-migration' ),
+                'connect'          => __( 'Connect', 'hostney-migration' ),
+                'connectionFailed' => __( 'Connection failed. Please check your token and try again.', 'hostney-migration' ),
+                'networkError'     => __( 'Network error. Please check your connection and try again.', 'hostney-migration' ),
+                'confirmDisconnect' => __( 'Are you sure you want to disconnect? You will need a new migration token to reconnect.', 'hostney-migration' ),
+            ),
         ) );
     }
 
@@ -180,13 +187,13 @@ class Hostney_Migration {
         check_ajax_referer( 'hostney_migration_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => 'Unauthorized.' ) );
+            wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'hostney-migration' ) ) );
         }
 
         $token = isset( $_POST['token'] ) ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
 
         if ( empty( $token ) || strlen( $token ) !== 96 || ! preg_match( '/^[a-f0-9]+$/i', $token ) ) {
-            wp_send_json_error( array( 'message' => 'Invalid token format. Token must be 96 characters.' ) );
+            wp_send_json_error( array( 'message' => __( 'Invalid token format. Token must be 96 characters.', 'hostney-migration' ) ) );
         }
 
         // Store the token (autoload disabled - only loaded when REST API validates requests)
@@ -218,8 +225,9 @@ class Hostney_Migration {
         if ( is_wp_error( $response ) ) {
             delete_option( 'hostney_migration_token' );
             // Log the actual error for debugging, but don't expose it to the user
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional server-side logging for migration connection failures
             error_log( '[Hostney Migration] Connection failed: ' . $response->get_error_message() );
-            wp_send_json_error( array( 'message' => 'Could not connect to Hostney. Please check your internet connection and try again.' ) );
+            wp_send_json_error( array( 'message' => __( 'Could not connect to Hostney. Please check your internet connection and try again.', 'hostney-migration' ) ) );
         }
 
         $status_code = wp_remote_retrieve_response_code( $response );
@@ -227,14 +235,14 @@ class Hostney_Migration {
 
         if ( $status_code !== 200 || empty( $body['success'] ) ) {
             delete_option( 'hostney_migration_token' );
-            $error_msg = ! empty( $body['message'] ) ? $body['message'] : 'Registration failed.';
+            $error_msg = ! empty( $body['message'] ) ? $body['message'] : __( 'Registration failed.', 'hostney-migration' );
             wp_send_json_error( array( 'message' => $error_msg ) );
         }
 
         update_option( 'hostney_migration_status', 'connected' );
 
         wp_send_json_success( array(
-            'message'     => $body['message'] ?? 'Connected successfully.',
+            'message'     => $body['message'] ?? __( 'Connected successfully.', 'hostney-migration' ),
             'destination' => $body['data']['destination'] ?? '',
         ) );
     }
@@ -246,13 +254,13 @@ class Hostney_Migration {
         check_ajax_referer( 'hostney_migration_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array( 'message' => 'Unauthorized.' ) );
+            wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'hostney-migration' ) ) );
         }
 
         delete_option( 'hostney_migration_token' );
         delete_option( 'hostney_migration_status' );
 
-        wp_send_json_success( array( 'message' => 'Disconnected successfully.' ) );
+        wp_send_json_success( array( 'message' => __( 'Disconnected successfully.', 'hostney-migration' ) ) );
     }
 
     /**

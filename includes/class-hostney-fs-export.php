@@ -50,6 +50,7 @@ class Hostney_FS_Export {
      * @return array File list with path, size, mtime, perms, type
      */
     public function scan() {
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- required for large site scans on shared hosting with short max_execution_time
         @set_time_limit( 300 );
 
         $files = array();
@@ -152,6 +153,7 @@ class Hostney_FS_Export {
      * @return array|WP_Error
      */
     public function read_chunk( $relative_path, $offset = 0, $length = 2097152 ) {
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- required for large file reads on shared hosting with short max_execution_time
         @set_time_limit( 120 );
 
         // Security: validate path
@@ -163,11 +165,11 @@ class Hostney_FS_Export {
         $full_path = $validated;
 
         if ( ! is_file( $full_path ) ) {
-            return new WP_Error( 'not_file', 'Path is not a file.', array( 'status' => 400 ) );
+            return new WP_Error( 'not_file', __( 'Path is not a file.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         if ( ! is_readable( $full_path ) ) {
-            return new WP_Error( 'not_readable', 'File is not readable.', array( 'status' => 403 ) );
+            return new WP_Error( 'not_readable', __( 'File is not readable.', 'hostney-migration' ), array( 'status' => 403 ) );
         }
 
         $file_size = filesize( $full_path );
@@ -184,18 +186,23 @@ class Hostney_FS_Export {
             );
         }
 
-        // Read chunk
+        // Read chunk using direct file operations.
+        // WP_Filesystem does not support byte-offset reads (fseek + partial fread),
+        // which are required for chunked file transfer of large files.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
         $handle = fopen( $full_path, 'rb' );
         if ( ! $handle ) {
-            return new WP_Error( 'open_failed', 'Failed to open file.', array( 'status' => 500 ) );
+            return new WP_Error( 'open_failed', __( 'Failed to open file.', 'hostney-migration' ), array( 'status' => 500 ) );
         }
 
         fseek( $handle, $offset );
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
         $data = fread( $handle, $length );
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
         fclose( $handle );
 
         if ( $data === false ) {
-            return new WP_Error( 'read_failed', 'Failed to read file.', array( 'status' => 500 ) );
+            return new WP_Error( 'read_failed', __( 'Failed to read file.', 'hostney-migration' ), array( 'status' => 500 ) );
         }
 
         $checksum = md5( $data );
@@ -220,17 +227,17 @@ class Hostney_FS_Export {
     private function validate_path( $relative_path ) {
         // Reject empty paths
         if ( empty( $relative_path ) ) {
-            return new WP_Error( 'empty_path', 'Path cannot be empty.', array( 'status' => 400 ) );
+            return new WP_Error( 'empty_path', __( 'Path cannot be empty.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         // Reject path traversal attempts
         if ( strpos( $relative_path, '..' ) !== false ) {
-            return new WP_Error( 'path_traversal', 'Path traversal not allowed.', array( 'status' => 403 ) );
+            return new WP_Error( 'path_traversal', __( 'Path traversal not allowed.', 'hostney-migration' ), array( 'status' => 403 ) );
         }
 
         // Reject null bytes
         if ( strpos( $relative_path, "\0" ) !== false ) {
-            return new WP_Error( 'null_byte', 'Invalid path.', array( 'status' => 400 ) );
+            return new WP_Error( 'null_byte', __( 'Invalid path.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         $base_path = rtrim( ABSPATH, '/' );
@@ -240,13 +247,13 @@ class Hostney_FS_Export {
         $real_path = realpath( $full_path );
 
         if ( $real_path === false ) {
-            return new WP_Error( 'not_found', 'File not found.', array( 'status' => 404 ) );
+            return new WP_Error( 'not_found', __( 'File not found.', 'hostney-migration' ), array( 'status' => 404 ) );
         }
 
         // Ensure resolved path is within ABSPATH
         $real_base = realpath( ABSPATH );
         if ( strpos( $real_path, $real_base ) !== 0 ) {
-            return new WP_Error( 'outside_root', 'File is outside WordPress root.', array( 'status' => 403 ) );
+            return new WP_Error( 'outside_root', __( 'File is outside WordPress root.', 'hostney-migration' ), array( 'status' => 403 ) );
         }
 
         return $real_path;

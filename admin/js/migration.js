@@ -8,6 +8,8 @@
 
     $(document).ready(function () {
 
+        var i18n = hostneyMigration.i18n || {};
+
         // Connect button handler
         $('#hostney-connect-btn').on('click', function () {
             var token = $('#hostney-token').val().trim();
@@ -16,12 +18,12 @@
 
             // Validate token format
             if (!token || token.length !== 96 || !/^[a-f0-9]+$/i.test(token)) {
-                $error.text('Please enter a valid 96-character migration token.').show();
+                $error.text(i18n.invalidToken || 'Please enter a valid 96-character migration token.').show();
                 return;
             }
 
             $error.hide();
-            $btn.prop('disabled', true).text('Connecting...');
+            $btn.prop('disabled', true).text(i18n.connecting || 'Connecting...');
 
             $.ajax({
                 url: hostneyMigration.ajaxUrl,
@@ -38,14 +40,14 @@
                     } else {
                         var msg = response.data && response.data.message
                             ? response.data.message
-                            : 'Connection failed. Please check your token and try again.';
+                            : (i18n.connectionFailed || 'Connection failed. Please check your token and try again.');
                         $error.text(msg).show();
-                        $btn.prop('disabled', false).text('Connect');
+                        $btn.prop('disabled', false).text(i18n.connect || 'Connect');
                     }
                 },
                 error: function () {
-                    $error.text('Network error. Please check your connection and try again.').show();
-                    $btn.prop('disabled', false).text('Connect');
+                    $error.text(i18n.networkError || 'Network error. Please check your connection and try again.').show();
+                    $btn.prop('disabled', false).text(i18n.connect || 'Connect');
                 }
             });
         });
@@ -60,7 +62,7 @@
 
         // Disconnect button handler
         $('#hostney-disconnect-btn').on('click', function () {
-            if (!confirm('Are you sure you want to disconnect? You will need a new migration token to reconnect.')) {
+            if (!confirm(i18n.confirmDisconnect || 'Are you sure you want to disconnect? You will need a new migration token to reconnect.')) {
                 return;
             }
 
