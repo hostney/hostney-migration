@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hostney Migration
  * Description: Migrate your WordPress site to Hostney hosting. Paste your migration token and the Hostney worker will pull your data automatically.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Hostney
  * Author URI: https://www.hostney.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'HOSTNEY_MIGRATION_VERSION', '1.0.0' );
+define( 'HOSTNEY_MIGRATION_VERSION', '1.0.1' );
 define( 'HOSTNEY_MIGRATION_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HOSTNEY_MIGRATION_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // Override in wp-config.php: define( 'HOSTNEY_MIGRATION_API_BASE', 'https://dev.example.com/api/v2/public/plugin-migration' );

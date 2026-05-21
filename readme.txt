@@ -2,9 +2,9 @@
 Contributors: hostney
 Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 
 == Changelog ==
 
+= 1.0.1 =
+* Confirmed compatibility with WordPress 7.0
+
 = 1.0.0 =
 * Initial release
 * Database export with primary key pagination and adaptive batch sizing
@@ -84,6 +87,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 * Admin UI with system requirement checks
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+Confirmed compatible with WordPress 7.0.
 
 = 1.0.0 =
 Initial release.
