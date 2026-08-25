@@ -4,7 +4,7 @@ Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,17 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 
 == Changelog ==
 
+= 1.0.3 =
+* Fixed: the per-IP rate limiter refreshed its own expiry on every request, so the
+  60-second window never elapsed during a migration and the limit behaved as a
+  one-time cap of 900 requests. Large sites were rejected with HTTP 429 partway
+  through the database export.
+* Added: a Retry-After header on rate-limited responses, so the caller knows exactly
+  how long to wait instead of guessing.
+* Changed: the request rate limit now applies only to authenticated requests.
+  Unauthenticated traffic is handled by a separate failed-authentication throttle and
+  can no longer consume a running migration's request budget.
+
 = 1.0.2 =
 * Confirmed compatibility with WordPress 7.1
 
@@ -90,6 +101,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 * Admin UI with system requirement checks
 
 == Upgrade Notice ==
+
+= 1.0.3 =
+Fixes migrations of larger sites failing with a "Too many requests" error partway through the database export. Recommended for all users.
 
 = 1.0.2 =
 Confirmed compatible with WordPress 7.1.
