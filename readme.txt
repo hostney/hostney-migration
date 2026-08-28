@@ -4,7 +4,7 @@ Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -74,6 +74,13 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 
 == Changelog ==
 
+= 1.0.4 =
+* Added: the system requirements panel now reports the size of your database.
+* Changed: a site whose database is larger than the destination hosting plan allows
+  is now told so when it connects, instead of partway through the migration. Nothing
+  is copied in that case, and reconnecting works once the plan is upgraded or the
+  database is reduced.
+
 = 1.0.3 =
 * Fixed: the per-IP rate limiter refreshed its own expiry on every request, so the
   60-second window never elapsed during a migration and the limit behaved as a
@@ -101,6 +108,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 * Admin UI with system requirement checks
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+Shows your database size in the system requirements, and reports a database that is too large for the destination hosting plan when you connect rather than after the migration has started.
 
 = 1.0.3 =
 Fixes migrations of larger sites failing with a "Too many requests" error partway through the database export. Recommended for all users.
