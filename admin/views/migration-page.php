@@ -10,6 +10,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 $hostney_token        = get_option( 'hostney_migration_token' );
 $hostney_status       = get_option( 'hostney_migration_status', '' );
 $hostney_is_connected = ! empty( $hostney_token ) && $hostney_status === 'connected';
+
+// Shown in the pre-flight table. Hostney caps how big a single database may be
+// on each hosting plan and refuses an oversized migration at Connect, so the
+// number that refusal talks about should be on screen BEFORE the customer
+// pastes a token - not first mentioned inside an error.
+$hostney_db_size = 0;
+if ( ! $hostney_is_connected ) {
+    $hostney_metadata = new Hostney_Metadata();
+    $hostney_db_size  = $hostney_metadata->get_database_size();
+}
 ?>
 
 <div class="wrap">
@@ -80,6 +90,16 @@ $hostney_is_connected = ! empty( $hostney_token ) && $hostney_status === 'connec
                                 <span class="hostney-check-pass"><?php esc_html_e( 'Enabled', 'hostney-migration' ); ?></span>
                             <?php else : ?>
                                 <span class="hostney-check-warn"><?php esc_html_e( 'Not detected (migration may still work)', 'hostney-migration' ); ?></span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><?php esc_html_e( 'Database size', 'hostney-migration' ); ?></td>
+                        <td>
+                            <?php if ( $hostney_db_size > 0 ) : ?>
+                                <span class="hostney-check-pass"><?php echo esc_html( Hostney_Metadata::format_bytes( $hostney_db_size ) ); ?></span>
+                            <?php else : ?>
+                                <span class="hostney-check-warn"><?php esc_html_e( 'Could not be measured', 'hostney-migration' ); ?></span>
                             <?php endif; ?>
                         </td>
                     </tr>
