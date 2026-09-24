@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hostney Migration
  * Description: Migrate your WordPress site to Hostney hosting. Paste your migration token and the Hostney worker will pull your data automatically.
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: Hostney
  * Author URI: https://www.hostney.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'HOSTNEY_MIGRATION_VERSION', '1.0.4' );
+define( 'HOSTNEY_MIGRATION_VERSION', '1.0.5' );
 define( 'HOSTNEY_MIGRATION_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HOSTNEY_MIGRATION_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // Override in wp-config.php: define( 'HOSTNEY_MIGRATION_API_BASE', 'https://dev.example.com/api/v2/public/plugin-migration' );
@@ -81,8 +81,7 @@ class Hostney_Migration {
      * Plugin deactivation - clean up stored token
      */
     public function deactivate() {
-        delete_option( 'hostney_migration_token' );
-        delete_option( 'hostney_migration_status' );
+        Hostney_Auth::end_connection();
     }
 
     /**
@@ -174,8 +173,22 @@ class Hostney_Migration {
 
     /**
      * Register REST API routes for the Hostney worker to call
+     *
+     * Only while a token is stored: a site that is not connected has no
+     * hostney-migrate/v1 routes at all. A connection past its age limit is
+     * ended here too, so ordinary REST traffic retires it even if the Hostney
+     * worker never calls again.
      */
     public function register_rest_routes() {
+        if ( ! Hostney_Auth::has_connection() ) {
+            return;
+        }
+
+        if ( Hostney_Auth::connection_expired() ) {
+            Hostney_Auth::end_connection( 'expired' );
+            return;
+        }
+
         $rest_api = new Hostney_REST_API();
         $rest_api->register_routes();
     }
@@ -196,7 +209,9 @@ class Hostney_Migration {
             wp_send_json_error( array( 'message' => __( 'Invalid token format. Token must be 96 characters.', 'hostney-migration' ) ) );
         }
 
-        // Store the token (autoload disabled - only loaded when REST API validates requests)
+        // Store the token (autoload disabled - only loaded when REST API validates requests).
+        // A previous connection's age must not carry over to this one.
+        delete_option( 'hostney_migration_connected_at' );
         update_option( 'hostney_migration_token', $token, false );
 
         // Collect site metadata
@@ -240,6 +255,9 @@ class Hostney_Migration {
         }
 
         update_option( 'hostney_migration_status', 'connected' );
+        // The connection's age is counted from here (Hostney_Auth::MAX_CONNECTION_AGE).
+        update_option( 'hostney_migration_connected_at', time(), false );
+        delete_option( 'hostney_migration_last_event' );
 
         wp_send_json_success( array(
             'message'     => $body['message'] ?? __( 'Connected successfully.', 'hostney-migration' ),
@@ -257,8 +275,7 @@ class Hostney_Migration {
             wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'hostney-migration' ) ) );
         }
 
-        delete_option( 'hostney_migration_token' );
-        delete_option( 'hostney_migration_status' );
+        Hostney_Auth::end_connection();
 
         wp_send_json_success( array( 'message' => __( 'Disconnected successfully.', 'hostney-migration' ) ) );
     }

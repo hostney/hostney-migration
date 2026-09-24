@@ -4,7 +4,7 @@ Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -37,7 +37,7 @@ Hostney Migration connects your WordPress site to the Hostney hosting platform s
 
 **Security:**
 
-All requests from the Hostney worker are authenticated using HMAC-SHA256 signatures with timestamp validation and replay protection. Tokens are cleared automatically when the plugin is deactivated.
+All requests from the Hostney worker are authenticated using HMAC-SHA256 signatures with timestamp validation and replay protection. The migration token is removed from your site automatically when the migration is over, when it is revoked in the Hostney control panel, 7 days after you connected at the latest, and when the plugin is deactivated. While no token is stored, the plugin's REST API endpoints do not exist.
 
 == Installation ==
 
@@ -68,11 +68,37 @@ No. WordPress multisite installations are not supported. The plugin will show a 
 
 The migration token and connection status are automatically deleted from the database when the plugin is deactivated.
 
+= Does the token stay on my site after the migration? =
+
+No. When the migration completes, fails for good or is cancelled, and when its token is revoked or expires in the Hostney control panel, Hostney tells the plugin to disconnect and the token is deleted. If that message cannot reach your site, the connection still ends on its own 7 days after you connected. The Tools > Hostney Migration screen then says why the site was disconnected.
+
 = Can I use this plugin with a WAF (ModSecurity, Wordfence, Imunify, Cloudflare)? =
 
 Yes. The plugin supports optional base64 encoding of request and response bodies to prevent WAF false positives on SQL or PHP content in migration data. This is handled automatically by the Hostney worker.
 
 == Changelog ==
+
+= 1.0.5 =
+* Security: the migration token is deleted from your site when the migration is over.
+  Hostney now tells the plugin to disconnect when a migration completes, fails for
+  good or is cancelled, and when its token is revoked or expires. Until now the token
+  stayed in your site's settings until you clicked Disconnect or deactivated the plugin.
+* Security: a connection now ends on its own 7 days after you connected, even if
+  Hostney cannot reach your site to disconnect it.
+* Security: the plugin's REST API endpoints now exist only while a token is stored.
+* Security: the file reader's check that a file sits inside your WordPress folder no
+  longer accepts a neighbouring folder whose name starts the same way.
+* Fixed: failed sign-in attempts by other visitors behind the same proxy (Cloudflare,
+  for example) could pause a running migration for up to a minute. A correctly signed
+  request is never held back by someone else's failures now.
+* Fixed: every request was counted twice against the rate limit, and every failed
+  sign-in twice against the lockout, because WordPress checks a route's permissions a
+  second time after answering it. The limit of 900 requests a minute was really 450,
+  which a migration could reach and then have to wait out.
+* Changed: when Hostney asks for it, database tables are exported in key order, one
+  page strictly after the last. Rows added or removed on a busy site during the
+  migration can no longer shift the pages, and tables whose primary key has more than
+  one column are no longer split part-way through a key.
 
 = 1.0.4 =
 * Added: the system requirements panel now reports the size of your database.
@@ -108,6 +134,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 * Admin UI with system requirement checks
 
 == Upgrade Notice ==
+
+= 1.0.5 =
+Security update: the migration token is removed from your site when the migration is over, and a connection ends on its own after 7 days. Recommended for all users.
 
 = 1.0.4 =
 Shows your database size in the system requirements, and reports a database that is too large for the destination hosting plan when you connect rather than after the migration has started.

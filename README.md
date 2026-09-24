@@ -22,7 +22,9 @@ All requests from the Hostney worker are authenticated using HMAC-SHA256 signatu
 - HMAC keys are derived from the token using a domain-separated hash rather than using the raw token as the key
 - Timestamps are validated within a 300-second window to prevent replay attacks
 - `hash_equals()` is used for all token and signature comparisons to prevent timing attacks
-- REST endpoints are only active while a token is stored; deactivating the plugin clears all credentials
+- REST endpoints are registered only while a token is stored; deactivating the plugin clears all credentials
+- The token is deleted when Hostney calls `/disconnect` (the migration completed, failed for good or was cancelled, or its token was revoked or expired), and in any case 7 days after Connect
+- The failed-authentication lockout (per connecting IP) is only consulted for requests that fail; a correctly signed request is never held back by other clients behind the same proxy
 
 ### WAF bypass encoding
 
@@ -38,7 +40,7 @@ File export is restricted to the WordPress root directory (ABSPATH). The plugin 
 
 - Rejecting path traversal sequences (`..`)
 - Rejecting null bytes
-- Resolving the real path with `realpath()` and confirming it sits within the resolved ABSPATH
+- Resolving the real path with `realpath()` and confirming it sits within the resolved ABSPATH, compared up to a directory separator so a neighbouring folder with the same name prefix does not pass
 
 ### What gets excluded
 
@@ -62,6 +64,7 @@ All endpoints are under the `hostney-migrate/v1` namespace and require valid aut
 | POST | `/db/rows` | Returns a batch of rows from a table using primary key pagination |
 | GET | `/fs/scan` | Scans the WordPress filesystem and returns a full file list with metadata |
 | POST | `/fs/read` | Reads a file chunk at a given byte offset, returns base64-encoded data with MD5 checksum |
+| POST | `/disconnect` | Deletes the stored token; body `{ "reason": "completed" }` (or `failed`, `cancelled`, `revoked`, `expired`) is shown on the admin screen |
 
 ### Authentication headers
 
@@ -84,7 +87,9 @@ signature = HMAC-SHA256(key, timestamp + request_body)
 
 Tables are exported in batches using primary key pagination. For tables with a numeric primary key, the worker passes `last_id` and receives the next batch of rows ordered by that key. This avoids the performance problems of LIMIT/OFFSET pagination on large tables.
 
-For tables without a numeric primary key, the plugin falls back to LIMIT/OFFSET pagination. Binary and BLOB columns are automatically base64-encoded with a `base64:` prefix so they survive JSON transport cleanly.
+For tables without a numeric primary key, the plugin falls back to LIMIT/OFFSET pagination, ordered by the primary key when the table has one. Binary and BLOB columns are automatically base64-encoded with a `base64:` prefix so they survive JSON transport cleanly.
+
+Since 1.0.5 the worker can ask for key paging instead by sending `cursor` (`""` for the first page). The plugin then orders the table by its primary key, or its first unique key whose columns are all NOT NULL, compares on every column of that key, and returns `paging: "key"` with a `next_cursor` to send back for the next page. Rows added or removed during the export cannot shift the pages, and a multi-column key is never split between two pages. A table without a usable key is paged the original way, and the response says so (`paging: "id"` or `"offset"`). A request without `cursor` is paged as in 1.0.4, except that the OFFSET path now orders by the primary key. That original paging cannot finish a table whose numeric key is DECIMAL or FLOAT, or holds values of 0 or below (`last_id` goes through `intval()`, and anything below 1 starts again from the top); key paging has neither problem for integer and DECIMAL keys.
 
 Batch size is adaptive. If a batch fails due to memory constraints, the plugin halves the batch size and retries up to three times before returning an error.
 

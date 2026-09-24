@@ -11,6 +11,32 @@ $hostney_token        = get_option( 'hostney_migration_token' );
 $hostney_status       = get_option( 'hostney_migration_status', '' );
 $hostney_is_connected = ! empty( $hostney_token ) && $hostney_status === 'connected';
 
+// A connection past its age limit ends the next time anything looks at it -
+// this screen, or any request that reaches the plugin.
+if ( $hostney_is_connected && Hostney_Auth::connection_expired() ) {
+    Hostney_Auth::end_connection( 'expired' );
+    $hostney_is_connected = false;
+}
+
+// Why the last connection ended, when Hostney ended it rather than someone
+// clicking Disconnect here.
+$hostney_end_notice = null;
+if ( ! $hostney_is_connected ) {
+    $hostney_last_event = get_option( 'hostney_migration_last_event' );
+    $hostney_reason     = is_array( $hostney_last_event ) && isset( $hostney_last_event['reason'] ) ? $hostney_last_event['reason'] : '';
+    $hostney_notices    = array(
+        'completed' => array( 'success', __( 'Your migration to Hostney is complete, and this site has been disconnected from Hostney. Its migration token no longer works, so you can deactivate and delete this plugin.', 'hostney-migration' ) ),
+        'failed'    => array( 'warning', __( 'The migration could not be completed, and this site has been disconnected from Hostney. To try again, generate a new migration token in the Hostney control panel and connect with it.', 'hostney-migration' ) ),
+        'cancelled' => array( 'warning', __( 'The migration was cancelled in the Hostney control panel, and this site has been disconnected. To start again, generate a new migration token and connect with it.', 'hostney-migration' ) ),
+        'revoked'   => array( 'warning', __( 'The migration token was revoked in the Hostney control panel, and this site has been disconnected. To migrate, generate a new migration token and connect with it.', 'hostney-migration' ) ),
+        'expired'   => array( 'warning', __( 'This site\'s connection to Hostney expired, and its migration token no longer works. To migrate, generate a new migration token in the Hostney control panel and connect with it.', 'hostney-migration' ) ),
+        'ended'     => array( 'warning', __( 'Hostney ended this site\'s connection, and its migration token no longer works.', 'hostney-migration' ) ),
+    );
+    if ( isset( $hostney_notices[ $hostney_reason ] ) ) {
+        $hostney_end_notice = $hostney_notices[ $hostney_reason ];
+    }
+}
+
 // Shown in the pre-flight table. Hostney caps how big a single database may be
 // on each hosting plan and refuses an oversized migration at Connect, so the
 // number that refusal talks about should be on screen BEFORE the customer
@@ -29,6 +55,12 @@ if ( ! $hostney_is_connected ) {
 
     <div id="hostney-migration-container">
         <?php if ( ! $hostney_is_connected ) : ?>
+
+            <?php if ( $hostney_end_notice ) : ?>
+                <div class="notice notice-<?php echo esc_attr( $hostney_end_notice[0] ); ?> inline">
+                    <p><?php echo esc_html( $hostney_end_notice[1] ); ?></p>
+                </div>
+            <?php endif; ?>
 
             <!-- Token entry form -->
             <div id="hostney-connect-section" class="hostney-card hostney-card-accent">
@@ -144,6 +176,7 @@ if ( ! $hostney_is_connected ) {
                         <li><?php esc_html_e( 'Database credentials and URLs are updated automatically', 'hostney-migration' ); ?></li>
                         <li><?php esc_html_e( 'Your site is live on Hostney', 'hostney-migration' ); ?></li>
                     </ol>
+                    <p><?php esc_html_e( 'When the migration is over, Hostney disconnects this site and its migration token stops working. The connection also ends on its own 7 days after you connected.', 'hostney-migration' ); ?></p>
                 </div>
 
                 <hr class="hostney-divider" />

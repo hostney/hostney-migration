@@ -250,9 +250,16 @@ class Hostney_FS_Export {
             return new WP_Error( 'not_found', __( 'File not found.', 'hostney-migration' ), array( 'status' => 404 ) );
         }
 
-        // Ensure resolved path is within ABSPATH
+        // Ensure resolved path is within ABSPATH. Compared up to a directory
+        // separator: a bare prefix test let a neighbouring folder whose name
+        // merely starts the same way through (/var/www/html-old for a root of
+        // /var/www/html), reachable from a symlink inside the root.
         $real_base = realpath( ABSPATH );
-        if ( strpos( $real_path, $real_base ) !== 0 ) {
+        if ( $real_base === false ) {
+            return new WP_Error( 'outside_root', __( 'File is outside WordPress root.', 'hostney-migration' ), array( 'status' => 403 ) );
+        }
+        $real_base = rtrim( $real_base, '/\\' );
+        if ( $real_path !== $real_base && strpos( $real_path, $real_base . DIRECTORY_SEPARATOR ) !== 0 ) {
             return new WP_Error( 'outside_root', __( 'File is outside WordPress root.', 'hostney-migration' ), array( 'status' => 403 ) );
         }
 

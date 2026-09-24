@@ -3,7 +3,8 @@
  * Hostney Migration - Request Authentication
  *
  * Validates incoming requests from the Hostney worker server
- * using token + HMAC-SHA256 signature verification.
+ * using token + HMAC-SHA256 signature verification, and owns
+ * how long a stored connection lasts.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -30,12 +31,128 @@ class Hostney_Auth {
     const AUTH_FAIL_MAX = 30;
 
     /**
-     * Validate an incoming REST API request
+     * How long a connection lasts, counted from Connect: 7 days, in seconds.
+     *
+     * Hostney tells this plugin to disconnect when a migration is over (see
+     * Hostney_REST_API::disconnect()). This is the limit for when that message
+     * never arrives: the site was unreachable at the time, or the migration was
+     * simply abandoned. It covers the 24 hours Hostney allows between Connect
+     * and Start, a long migration, and the days a failed one can still be
+     * continued from the control panel.
+     */
+    const MAX_CONNECTION_AGE = 604800;
+
+    /**
+     * Why a connection ended, as remembered for the admin screen.
+     */
+    const END_REASONS = array( 'completed', 'failed', 'cancelled', 'revoked', 'expired', 'ended' );
+
+    /**
+     * validate_request() verdicts for the requests being served, by request object.
+     *
+     * WordPress runs a route's permission callback TWICE for one request: once to
+     * dispatch it, and again afterwards in rest_send_allow_header() to build the
+     * Allow header. Checked twice, every request was counted twice against the
+     * rate limit - the documented 900 a minute was really 450, which the worker's
+     * normal pace can reach - and every failed one twice against the lockout.
+     * The second call now gets the first call's verdict.
+     *
+     * @var array
+     */
+    private static $verdicts = array();
+
+    /**
+     * Is a migration token stored on this site?
+     *
+     * @return bool
+     */
+    public static function has_connection() {
+        return '' !== (string) get_option( 'hostney_migration_token', '' );
+    }
+
+    /**
+     * When this site connected, as a unix timestamp.
+     *
+     * A site connected by 1.0.4 or earlier never recorded it, so the clock
+     * starts the first time this version sees the connection: updating the
+     * plugin part-way through a migration must not end it on the spot.
+     *
+     * @return int
+     */
+    public static function connected_at() {
+        $connected_at = intval( get_option( 'hostney_migration_connected_at', 0 ) );
+
+        if ( $connected_at <= 0 ) {
+            $connected_at = time();
+            update_option( 'hostney_migration_connected_at', $connected_at, false );
+        }
+
+        return $connected_at;
+    }
+
+    /**
+     * Has the stored connection outlived MAX_CONNECTION_AGE?
+     *
+     * @return bool
+     */
+    public static function connection_expired() {
+        return ( time() - self::connected_at() ) > self::MAX_CONNECTION_AGE;
+    }
+
+    /**
+     * Forget the connection: the token, its status and when it was made.
+     *
+     * With a reason, the admin screen says why the next time it is opened.
+     * Without one (Disconnect clicked here, or the plugin deactivated) there is
+     * nothing to explain, and any earlier explanation is cleared too.
+     *
+     * @param string $reason One of END_REASONS, or ''.
+     * @return void
+     */
+    public static function end_connection( $reason = '' ) {
+        delete_option( 'hostney_migration_token' );
+        delete_option( 'hostney_migration_status' );
+        delete_option( 'hostney_migration_connected_at' );
+
+        if ( in_array( $reason, self::END_REASONS, true ) ) {
+            update_option(
+                'hostney_migration_last_event',
+                array(
+                    'reason' => $reason,
+                    'time'   => time(),
+                ),
+                false
+            );
+        } else {
+            delete_option( 'hostney_migration_last_event' );
+        }
+    }
+
+    /**
+     * Validate an incoming REST API request (the routes' permission callback)
+     *
+     * Checked once per request: see $verdicts.
      *
      * @param WP_REST_Request $request
      * @return bool|WP_Error
      */
     public static function validate_request( $request ) {
+        $id = spl_object_id( $request );
+
+        if ( ! isset( self::$verdicts[ $id ] ) ) {
+            self::$verdicts[ $id ] = self::check_request( $request );
+        }
+
+        return self::$verdicts[ $id ];
+    }
+
+    /**
+     * The checks behind validate_request(), run once per request.
+     *
+     * @param WP_REST_Request $request
+     * @return bool|WP_Error
+     */
+    private static function check_request( $request ) {
         $stored_token = get_option( 'hostney_migration_token' );
 
         if ( empty( $stored_token ) ) {
@@ -46,33 +163,34 @@ class Hostney_Auth {
             );
         }
 
+        // Refused whoever is asking, so ended here whoever is asking: nothing is
+        // gained by keeping a token nobody may use any more.
+        if ( self::connection_expired() ) {
+            self::end_connection( 'expired' );
+            return new WP_Error(
+                'hostney_connection_expired',
+                __( 'This site\'s connection to Hostney has expired. Generate a new migration token in the Hostney control panel and connect with it.', 'hostney-migration' ),
+                array( 'status' => 401 )
+            );
+        }
+
         // Get auth headers
         $token     = $request->get_header( 'X-Migration-Token' );
         $timestamp = $request->get_header( 'X-Migration-Timestamp' );
         $signature = $request->get_header( 'X-Migration-Signature' );
 
-        // Cheap brute-force guard, checked before any comparison work is done.
-        $lockout = self::check_auth_failures();
-        if ( is_wp_error( $lockout ) ) {
-            return $lockout;
-        }
-
         if ( empty( $token ) || empty( $timestamp ) || empty( $signature ) ) {
-            self::record_auth_failure();
-            return new WP_Error(
+            return self::auth_failure(
                 'hostney_missing_headers',
-                __( 'Missing authentication headers.', 'hostney-migration' ),
-                array( 'status' => 401 )
+                __( 'Missing authentication headers.', 'hostney-migration' )
             );
         }
 
         // Validate token matches
         if ( ! hash_equals( $stored_token, $token ) ) {
-            self::record_auth_failure();
-            return new WP_Error(
+            return self::auth_failure(
                 'hostney_invalid_token',
-                __( 'Invalid migration token.', 'hostney-migration' ),
-                array( 'status' => 401 )
+                __( 'Invalid migration token.', 'hostney-migration' )
             );
         }
 
@@ -81,11 +199,9 @@ class Hostney_Auth {
         $request_time = intval( $timestamp );
 
         if ( abs( $current_time - $request_time ) > 300 ) {
-            self::record_auth_failure();
-            return new WP_Error(
+            return self::auth_failure(
                 'hostney_expired_timestamp',
-                __( 'Request timestamp expired.', 'hostney-migration' ),
-                array( 'status' => 401 )
+                __( 'Request timestamp expired.', 'hostney-migration' )
             );
         }
 
@@ -122,16 +238,14 @@ class Hostney_Auth {
         $expected_signature = hash_hmac( 'sha256', $signature_data, $hmac_key );
 
         if ( ! hash_equals( $expected_signature, $signature ) ) {
-            self::record_auth_failure();
-            return new WP_Error(
+            return self::auth_failure(
                 'hostney_invalid_signature',
-                __( 'Invalid request signature.', 'hostney-migration' ),
-                array( 'status' => 401 )
+                __( 'Invalid request signature.', 'hostney-migration' )
             );
         }
 
         // The request is authentic. Only now does it count against the request-rate
-        // budget: an unsigned flood is handled by the auth-failure lockout above and
+        // budget: an unsigned flood is handled by the auth-failure lockout and
         // must not be able to consume a real migration's quota.
         $rate_check = self::check_rate_limit();
         if ( is_wp_error( $rate_check ) ) {
@@ -139,6 +253,34 @@ class Hostney_Auth {
         }
 
         return true;
+    }
+
+    /**
+     * Refuse a request that failed authentication, and count it.
+     *
+     * The failed-attempt lockout is consulted here, for failed requests only,
+     * and never in front of a valid one. It counts by connecting IP, and behind
+     * a proxy such as Cloudflare that address is shared with everyone else
+     * using the same edge server: checked before the token, other people's bad
+     * requests could hold up a running migration. Checking the token first
+     * costs no more than reading the lockout would.
+     *
+     * An address that is already locked out gets the 429 without being counted
+     * again, so a flood stops writing once the limit is reached.
+     *
+     * @param string $code    Error code.
+     * @param string $message User-facing message.
+     * @return WP_Error
+     */
+    private static function auth_failure( $code, $message ) {
+        $lockout = self::check_auth_failures();
+        if ( is_wp_error( $lockout ) ) {
+            return $lockout;
+        }
+
+        self::record_auth_failure();
+
+        return new WP_Error( $code, $message, array( 'status' => 401 ) );
     }
 
     /**
@@ -211,7 +353,7 @@ class Hostney_Auth {
     }
 
     /**
-     * Reject the request if this IP has failed authentication too often.
+     * Is this IP locked out for failing authentication too often?
      *
      * @return true|WP_Error
      */

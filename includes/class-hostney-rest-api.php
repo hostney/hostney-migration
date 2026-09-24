@@ -47,6 +47,12 @@ class Hostney_REST_API {
             'callback'            => array( $this, 'read_file_chunk' ),
             'permission_callback' => array( 'Hostney_Auth', 'validate_request' ),
         ) );
+
+        register_rest_route( $namespace, '/disconnect', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'disconnect' ),
+            'permission_callback' => array( 'Hostney_Auth', 'validate_request' ),
+        ) );
     }
 
     /**
@@ -88,16 +94,25 @@ class Hostney_REST_API {
 
     /**
      * POST /db/rows - Get rows from a table
-     * Body: { table, last_id, limit }
+     * Body: { table, last_id, limit, cursor }
+     *
+     * `cursor` is optional: present, it asks for key-order paging (see
+     * Hostney_DB_Export::get_rows()); absent, the table is paged on last_id as
+     * it always was.
      */
     public function get_db_rows( $request ) {
         $this->set_nocache_headers();
         $table   = $request->get_param( 'table' );
         $last_id = intval( $request->get_param( 'last_id' ) );
         $limit   = intval( $request->get_param( 'limit' ) );
+        $cursor  = $request->get_param( 'cursor' );
 
         if ( empty( $table ) ) {
             return new WP_Error( 'missing_table', __( 'Table name is required.', 'hostney-migration' ), array( 'status' => 400 ) );
+        }
+
+        if ( null !== $cursor && ! is_string( $cursor ) ) {
+            return new WP_Error( 'invalid_cursor', __( 'Invalid paging cursor.', 'hostney-migration' ), array( 'status' => 400 ) );
         }
 
         if ( $limit <= 0 || $limit > 5000 ) {
@@ -111,7 +126,7 @@ class Hostney_REST_API {
         while ( $attempts < 3 ) {
             $attempts++;
             try {
-                $result = $db_export->get_rows( $table, $last_id, $limit );
+                $result = $db_export->get_rows( $table, $last_id, $limit, $cursor );
 
                 if ( is_wp_error( $result ) ) {
                     return $result;
@@ -172,5 +187,31 @@ class Hostney_REST_API {
         }
 
         return rest_ensure_response( $result );
+    }
+
+    /**
+     * POST /disconnect - Hostney is done with this connection
+     * Body: { reason }
+     *
+     * Hostney sends this when the migration completes, fails for good, is
+     * cancelled, or when its token is revoked or expires in the control panel.
+     * The request passed Hostney_Auth::validate_request() like every other, so
+     * only the holder of this site's current token can end its connection; a
+     * request signed with an older token is refused and changes nothing.
+     */
+    public function disconnect( $request ) {
+        $this->set_nocache_headers();
+        $reason = $request->get_param( 'reason' );
+
+        if ( ! is_string( $reason ) || ! in_array( $reason, Hostney_Auth::END_REASONS, true ) ) {
+            $reason = 'ended';
+        }
+
+        Hostney_Auth::end_connection( $reason );
+
+        return rest_ensure_response( array(
+            'success' => true,
+            'message' => __( 'This site has been disconnected from Hostney.', 'hostney-migration' ),
+        ) );
     }
 }
