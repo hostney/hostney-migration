@@ -46,9 +46,8 @@ File export is restricted to the WordPress root directory (ABSPATH). The plugin 
 
 The following are excluded from file migration automatically:
 
-- Cache directories
+- `cache`, `upgrade`, `upgrade-temp-backup`, `wflogs`, `ai1wm-backups`, `updraft` and `backup*` folders - **only directly inside wp-content** (since 1.0.6; before, any folder with these names was skipped at any depth, including a plugin's own code such as Smush's `core/backups/` and Elementor's `core/upgrade/`)
 - Log files
-- Backup plugin directories (UpdraftPlus, All-in-One WP Migration, etc.)
 - Node modules
 - `.git` directories
 - `.DS_Store`, `Thumbs.db`, and similar system files

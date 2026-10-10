@@ -13,19 +13,118 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Hostney_FS_Export {
 
     /**
-     * Directories to exclude from migration
+     * Directories skipped wherever they are: version control and build
+     * tooling. WordPress never loads anything from them.
      */
-    private $excluded_dirs = array(
-        'cache',
-        'upgrade',
-        'wflogs',
-        'ai1wm-backups',
-        'updraft',
-        'node_modules',
-        '.git',
-        'backups',
-        'backup',
-    );
+    const SKIP_EVERYWHERE = array( '.git', 'node_modules' );
+
+    /**
+     * Directories skipped ONLY directly inside the content folder (wp-content):
+     * page caches, update scratch space, security-plugin logs and backup
+     * archives. Any other folder there whose name starts with "backup" is
+     * skipped too (backup-db, backups-dup-lite, ...).
+     *
+     * Until 1.0.6 these names were skipped at EVERY depth, which also skipped
+     * a plugin's own code kept in a folder with one of these names - Smush
+     * keeps classes in core/backups/, Elementor in core/upgrade/, and bundled
+     * libraries such as psr/cache live in a cache/ folder. The migrated site
+     * then stopped with WordPress's critical error page.
+     */
+    const SKIP_IN_CONTENT_ROOT = array( 'cache', 'upgrade', 'upgrade-temp-backup', 'wflogs', 'ai1wm-backups', 'updraft' );
+
+    /**
+     * At most this many unreadable paths are named in the scan report; the
+     * count covers the rest.
+     */
+    const MAX_REPORTED_PATHS = 20;
+
+    /**
+     * What the last scan() left out, so Hostney can say so instead of the
+     * site arriving with files silently missing.
+     */
+    private $truncated = false;
+    private $skipped_links = 0;
+    private $unreadable = 0;
+    private $unreadable_paths = array();
+
+    /**
+     * Whether a directory is left out of the migration.
+     *
+     * Shared with the size estimate (Hostney_Metadata) so the estimate counts
+     * exactly what is transferred.
+     *
+     * @param string $parent Absolute path of the folder that holds it.
+     * @param string $name   The directory's own name.
+     * @return bool
+     */
+    public static function skip_directory( $parent, $name ) {
+        if ( in_array( $name, self::SKIP_EVERYWHERE, true ) ) {
+            return true;
+        }
+        if ( ! self::is_content_root( $parent ) ) {
+            return false;
+        }
+        return in_array( $name, self::SKIP_IN_CONTENT_ROOT, true ) || 0 === strpos( $name, 'backup' );
+    }
+
+    /**
+     * Whether $dir is the content folder: wp-content in the WordPress folder,
+     * and WP_CONTENT_DIR when a site moved it.
+     *
+     * @param string $dir Absolute path.
+     * @return bool
+     */
+    private static function is_content_root( $dir ) {
+        static $roots = null;
+        if ( null === $roots ) {
+            $roots = array( self::normalize_path( ABSPATH . 'wp-content' ) );
+            if ( defined( 'WP_CONTENT_DIR' ) ) {
+                $roots[] = self::normalize_path( WP_CONTENT_DIR );
+            }
+        }
+        return in_array( self::normalize_path( $dir ), $roots, true );
+    }
+
+    /**
+     * @param string $path
+     * @return string Forward slashes, no trailing slash.
+     */
+    private static function normalize_path( $path ) {
+        return rtrim( wp_normalize_path( $path ), '/' );
+    }
+
+    /**
+     * True when the last scan() stopped at its file limit - the list is
+     * incomplete.
+     *
+     * @return bool
+     */
+    public function was_truncated() {
+        return $this->truncated;
+    }
+
+    /**
+     * What the last scan() could not include.
+     *
+     * @return array { links: int, unreadable: int, unreadable_paths: string[] }
+     */
+    public function skipped() {
+        return array(
+            'links'            => $this->skipped_links,
+            'unreadable'       => $this->unreadable,
+            'unreadable_paths' => $this->unreadable_paths,
+        );
+    }
+
+    /**
+     * @param string $relative_path
+     */
+    private function note_unreadable( $relative_path ) {
+        $this->unreadable++;
+        if ( count( $this->unreadable_paths ) < self::MAX_REPORTED_PATHS ) {
+            $this->unreadable_paths[] = $relative_path;
+        }
+    }
 
     /**
      * Files to exclude from migration
@@ -57,6 +156,11 @@ class Hostney_FS_Export {
         $base_path = rtrim( ABSPATH, '/' );
         $max_files = 500000; // Safety limit
 
+        $this->truncated        = false;
+        $this->skipped_links    = 0;
+        $this->unreadable       = 0;
+        $this->unreadable_paths = array();
+
         $this->scan_directory( $base_path, $base_path, $files, $max_files );
 
         return $files;
@@ -72,11 +176,15 @@ class Hostney_FS_Export {
      */
     private function scan_directory( $dir, $base_path, &$files, $max_files ) {
         if ( count( $files ) >= $max_files ) {
+            $this->truncated = true;
             return;
         }
 
         $handle = @opendir( $dir );
         if ( ! $handle ) {
+            // A folder PHP may not open arrives EMPTY - a plugin folder like
+            // that breaks the site. Report it instead of returning quietly.
+            $this->note_unreadable( $dir === $base_path ? '.' : substr( $dir, strlen( $base_path ) + 1 ) );
             return;
         }
 
@@ -86,20 +194,21 @@ class Hostney_FS_Export {
             }
 
             if ( count( $files ) >= $max_files ) {
+                $this->truncated = true;
                 break;
             }
 
             $full_path = $dir . '/' . $entry;
             $relative_path = substr( $full_path, strlen( $base_path ) + 1 );
 
-            // Skip symlinks
+            // Skip symlinks (counted, so a linked plugin folder is not lost silently)
             if ( is_link( $full_path ) ) {
+                $this->skipped_links++;
                 continue;
             }
 
             if ( is_dir( $full_path ) ) {
-                // Check excluded directories
-                if ( in_array( $entry, $this->excluded_dirs, true ) ) {
+                if ( self::skip_directory( $dir, $entry ) ) {
                     continue;
                 }
 
@@ -128,6 +237,7 @@ class Hostney_FS_Export {
 
                 $stat = @stat( $full_path );
                 if ( ! $stat ) {
+                    $this->note_unreadable( $relative_path );
                     continue;
                 }
 

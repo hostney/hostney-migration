@@ -156,8 +156,12 @@ class Hostney_REST_API {
         $files = $fs_export->scan();
 
         return rest_ensure_response( array(
-            'success' => true,
-            'files'   => $files,
+            'success'   => true,
+            'files'     => $files,
+            // 1.0.6: what the list does NOT hold - a stop at the file limit,
+            // links, unreadable folders and files - so Hostney can say so.
+            'truncated' => $fs_export->was_truncated(),
+            'skipped'   => $fs_export->skipped(),
         ) );
     }
 

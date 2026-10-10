@@ -4,7 +4,7 @@ Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,10 +30,12 @@ Hostney Migration connects your WordPress site to the Hostney hosting platform s
 
 **What gets excluded automatically:**
 
-* Cache directories
+* The page cache and update folders directly inside wp-content (cache, upgrade)
 * Log files
-* Backup plugin directories (UpdraftPlus, All-in-One WP Migration, etc.)
+* Backup folders directly inside wp-content (UpdraftPlus, All-in-One WP Migration, and folders whose name starts with "backup")
 * Node modules and .git directories
+
+Folders inside your plugins and themes are always copied, whatever their name.
 
 **Security:**
 
@@ -77,6 +79,16 @@ No. When the migration completes, fails for good or is cancelled, and when its t
 Yes. The plugin supports optional base64 encoding of request and response bodies to prevent WAF false positives on SQL or PHP content in migration data. This is handled automatically by the Hostney worker.
 
 == Changelog ==
+
+= 1.0.6 =
+* Fixed: a plugin or theme that keeps part of its own code in a folder named cache,
+  upgrade, backup or backups (Smush and Elementor among them, and many plugins that
+  bundle libraries) arrived at Hostney without that folder, and the migrated site
+  showed WordPress's critical error page. These folders are now skipped only where
+  WordPress keeps caches, update files and backups: directly inside wp-content.
+* Added: the file list now tells Hostney when a very large site reached the file limit,
+  and which folders and files could not be read on your server, instead of leaving them
+  out silently.
 
 = 1.0.5 =
 * Security: the migration token is deleted from your site when the migration is over.
@@ -134,6 +146,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 * Admin UI with system requirement checks
 
 == Upgrade Notice ==
+
+= 1.0.6 =
+Fixes migrated sites that failed to load because part of a plugin (for example Smush or Elementor) was not copied. Update before you migrate.
 
 = 1.0.5 =
 Security update: the migration token is removed from your site when the migration is over, and a connection ends on its own after 7 days. Recommended for all users.

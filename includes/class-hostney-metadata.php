@@ -123,8 +123,6 @@ class Hostney_Metadata {
             return;
         }
 
-        $excluded_dirs = array( 'cache', 'upgrade', 'node_modules', '.git', 'wflogs', 'ai1wm-backups', 'updraft' );
-
         $handle = @opendir( $dir );
         if ( ! $handle ) {
             return;
@@ -146,7 +144,8 @@ class Hostney_Metadata {
             }
 
             if ( is_dir( $full_path ) ) {
-                if ( ! in_array( $entry, $excluded_dirs, true ) ) {
+                // The same rule as the transfer, so the estimate counts what is copied.
+                if ( ! Hostney_FS_Export::skip_directory( $dir, $entry ) ) {
                     $this->count_directory( $full_path, $count, $size, $max );
                 }
             } else {
