@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Hostney Migration
  * Description: Migrate your WordPress site to Hostney hosting. Paste your migration token and the Hostney worker will pull your data automatically.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: Hostney
  * Author URI: https://www.hostney.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'HOSTNEY_MIGRATION_VERSION', '1.0.6' );
+define( 'HOSTNEY_MIGRATION_VERSION', '1.0.7' );
 define( 'HOSTNEY_MIGRATION_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HOSTNEY_MIGRATION_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // Override in wp-config.php: define( 'HOSTNEY_MIGRATION_API_BASE', 'https://dev.example.com/api/v2/public/plugin-migration' );
@@ -231,6 +231,14 @@ class Hostney_Migration {
                 'total_files'      => $site_info['total_files'],
                 'total_db_size'    => $site_info['total_db_size'],
                 'total_files_size' => $site_info['total_files_size'],
+                // 1.0.7: what Hostney refuses at Connect instead of migrating a
+                // site that would arrive incomplete - a multisite network with
+                // more than one site, and folders the migration cannot copy
+                // (Hostney_FS_Export::layout()).
+                'plugin_version'   => HOSTNEY_MIGRATION_VERSION,
+                'is_multisite'     => $site_info['is_multisite'],
+                'site_count'       => $site_info['site_count'],
+                'layout_problem'   => $site_info['layout_problem'],
             ) ),
             'headers' => array(
                 'Content-Type' => 'application/json',

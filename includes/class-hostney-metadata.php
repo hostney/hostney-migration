@@ -17,27 +17,26 @@ class Hostney_Metadata {
      * @return array Site metadata
      */
     public function get_site_info() {
-        global $wpdb;
-
-        // Count tables
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time metadata read, caching not applicable
-        $tables = $wpdb->get_col( 'SHOW TABLES' );
-        $total_tables = count( $tables );
-
-        // Calculate total DB size
-        $total_db_size = $this->get_database_size();
+        // This site's tables and their size - another site sharing the database
+        // is not part of the migration (see get_database_breakdown()).
+        $database = $this->get_database_breakdown();
 
         // Estimate file count and size
         $file_stats = $this->estimate_files();
+
+        $multisite = self::multisite_info();
+        $layout    = Hostney_FS_Export::layout();
 
         return array(
             'wordpress_version' => get_bloginfo( 'version' ),
             'php_version'       => PHP_VERSION,
             'site_url'          => get_option( 'siteurl' ),
             'home_url'          => get_option( 'home' ),
-            'is_multisite'      => is_multisite(),
-            'total_tables'      => $total_tables,
-            'total_db_size'     => $total_db_size,
+            'is_multisite'      => $multisite['enabled'],
+            'site_count'        => $multisite['sites'],
+            'layout_problem'    => $layout['problem'],
+            'total_tables'      => $database['tables'],
+            'total_db_size'     => $database['size'],
             'total_files'       => $file_stats['count'],
             'total_files_size'  => $file_stats['size'],
             'active_plugins'    => count( get_option( 'active_plugins', array() ) ),
@@ -61,21 +60,77 @@ class Hostney_Metadata {
      * @return int Size in bytes, 0 if it could not be read
      */
     public function get_database_size() {
+        $database = $this->get_database_breakdown();
+        return $database['size'];
+    }
+
+    /**
+     * This site's share of the database (1.0.7): its tables and their size, and
+     * the tables of other WordPress sites that share the database, which the
+     * migration leaves out (Hostney_DB_Export::other_install_prefixes()). Until
+     * 1.0.7 those were counted, so a site sharing its database with a bigger one
+     * could be refused as too large for a plan it fits.
+     *
+     * @return array { size: int, tables: int, other_tables: int, other_prefixes: string[] }
+     */
+    public function get_database_breakdown() {
         global $wpdb;
 
-        $total = 0;
+        $breakdown = array(
+            'size'           => 0,
+            'tables'         => 0,
+            'other_tables'   => 0,
+            'other_prefixes' => array(),
+        );
+
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time metadata read, caching not applicable
         $table_status = $wpdb->get_results( 'SHOW TABLE STATUS', ARRAY_A );
 
         if ( empty( $table_status ) ) {
-            return 0;
+            return $breakdown;
         }
+
+        $names  = wp_list_pluck( $table_status, 'Name' );
+        $others = Hostney_DB_Export::other_install_prefixes( $names, $wpdb->base_prefix );
+
+        $breakdown['other_prefixes'] = $others;
 
         foreach ( $table_status as $table ) {
-            $total += intval( $table['Data_length'] ) + intval( $table['Index_length'] );
+            if ( Hostney_DB_Export::belongs_to_other_install( $table['Name'], $wpdb->base_prefix, $others ) ) {
+                $breakdown['other_tables']++;
+                continue;
+            }
+            $breakdown['tables']++;
+            $breakdown['size'] += intval( $table['Data_length'] ) + intval( $table['Index_length'] );
         }
 
-        return $total;
+        return $breakdown;
+    }
+
+    /**
+     * Is this a multisite network, and how many sites does it have (1.0.7)?
+     * Hostney migrates single sites; a network with more than one site is
+     * refused when it connects rather than migrated with all but one site
+     * missing.
+     *
+     * @return array { enabled: bool, sites: int }
+     */
+    public static function multisite_info() {
+        if ( ! is_multisite() ) {
+            return array(
+                'enabled' => false,
+                'sites'   => 1,
+            );
+        }
+
+        global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the live count; get_blog_count() is a cached figure
+        $sites = intval( $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->blogs} WHERE deleted = 0" ) );
+
+        return array(
+            'enabled' => true,
+            'sites'   => max( 1, $sites ),
+        );
     }
 
     /**

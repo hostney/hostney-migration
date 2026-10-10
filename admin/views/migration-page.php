@@ -41,11 +41,30 @@ if ( ! $hostney_is_connected ) {
 // on each hosting plan and refuses an oversized migration at Connect, so the
 // number that refusal talks about should be on screen BEFORE the customer
 // pastes a token - not first mentioned inside an error.
-$hostney_db_size = 0;
+$hostney_db_size      = 0;
+$hostney_other_tables = 0;
+$hostney_multisite    = array(
+    'enabled' => false,
+    'sites'   => 1,
+);
+$hostney_layout       = array( 'problem' => null );
 if ( ! $hostney_is_connected ) {
-    $hostney_metadata = new Hostney_Metadata();
-    $hostney_db_size  = $hostney_metadata->get_database_size();
+    $hostney_metadata     = new Hostney_Metadata();
+    $hostney_database     = $hostney_metadata->get_database_breakdown();
+    $hostney_db_size      = $hostney_database['size'];
+    $hostney_other_tables = $hostney_database['other_tables'];
+    // What Connect refuses (1.0.7), shown before a token is pasted.
+    $hostney_multisite = Hostney_Metadata::multisite_info();
+    $hostney_layout    = Hostney_FS_Export::layout();
 }
+
+$hostney_layout_messages = array(
+    'content_outside'      => __( 'The wp-content folder is outside the WordPress folder - not supported', 'hostney-migration' ),
+    'content_renamed'      => __( 'The wp-content folder has been renamed or moved - not supported', 'hostney-migration' ),
+    'plugins_elsewhere'    => __( 'The plugins folder is not in wp-content - not supported', 'hostney-migration' ),
+    'mu_plugins_elsewhere' => __( 'The must-use plugins folder is not in wp-content - not supported', 'hostney-migration' ),
+    'uploads_elsewhere'    => __( 'The uploads folder is not wp-content/uploads - not supported', 'hostney-migration' ),
+);
 ?>
 
 <div class="wrap">
@@ -71,7 +90,7 @@ if ( ! $hostney_is_connected ) {
                     <?php
                     printf(
                         /* translators: %s: link to Hostney privacy policy */
-                        esc_html__( 'When you connect, this plugin sends your site URL, WordPress version, PHP version, and database/file size estimates to Hostney servers (%s) to register the migration. No file contents or database data are sent during this step.', 'hostney-migration' ),
+                        esc_html__( 'When you connect, this plugin sends your site URL, WordPress version, PHP version, database/file size estimates, and whether this site is a multisite network or has moved folders to Hostney servers (%s) to register the migration. No file contents or database data are sent during this step.', 'hostney-migration' ),
                         '<a href="https://www.hostney.com/documents/privacy-policy" target="_blank" rel="noopener noreferrer">' . esc_html__( 'privacy policy', 'hostney-migration' ) . '</a>'
                     );
                     ?>
@@ -130,6 +149,24 @@ if ( ! $hostney_is_connected ) {
                         <td>
                             <?php if ( $hostney_db_size > 0 ) : ?>
                                 <span class="hostney-check-pass"><?php echo esc_html( Hostney_Metadata::format_bytes( $hostney_db_size ) ); ?></span>
+                                <?php if ( $hostney_other_tables > 0 ) : ?>
+                                    <span class="hostney-check-note">
+                                        <?php
+                                        echo esc_html(
+                                            sprintf(
+                                                /* translators: %d: number of database tables that belong to other WordPress sites */
+                                                _n(
+                                                    '(%d table of another WordPress site in this database is left out)',
+                                                    '(%d tables of other WordPress sites in this database are left out)',
+                                                    $hostney_other_tables,
+                                                    'hostney-migration'
+                                                ),
+                                                $hostney_other_tables
+                                            )
+                                        );
+                                        ?>
+                                    </span>
+                                <?php endif; ?>
                             <?php else : ?>
                                 <span class="hostney-check-warn"><?php esc_html_e( 'Could not be measured', 'hostney-migration' ); ?></span>
                             <?php endif; ?>
@@ -138,10 +175,32 @@ if ( ! $hostney_is_connected ) {
                     <tr>
                         <td><?php esc_html_e( 'Multisite', 'hostney-migration' ); ?></td>
                         <td>
-                            <?php if ( ! is_multisite() ) : ?>
+                            <?php if ( ! $hostney_multisite['enabled'] ) : ?>
                                 <span class="hostney-check-pass"><?php esc_html_e( 'No (single site)', 'hostney-migration' ); ?></span>
+                            <?php elseif ( $hostney_multisite['sites'] <= 1 ) : ?>
+                                <span class="hostney-check-warn"><?php esc_html_e( 'A network with one site - it is migrated as a single site', 'hostney-migration' ); ?></span>
                             <?php else : ?>
-                                <span class="hostney-check-fail"><?php esc_html_e( 'Multisite not supported', 'hostney-migration' ); ?></span>
+                                <span class="hostney-check-fail">
+                                    <?php
+                                    echo esc_html(
+                                        sprintf(
+                                            /* translators: %d: number of sites in the multisite network */
+                                            __( 'A network with %d sites - not supported', 'hostney-migration' ),
+                                            $hostney_multisite['sites']
+                                        )
+                                    );
+                                    ?>
+                                </span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><?php esc_html_e( 'Folders', 'hostney-migration' ); ?></td>
+                        <td>
+                            <?php if ( null === $hostney_layout['problem'] ) : ?>
+                                <span class="hostney-check-pass"><?php esc_html_e( 'Standard WordPress folders', 'hostney-migration' ); ?></span>
+                            <?php elseif ( isset( $hostney_layout_messages[ $hostney_layout['problem'] ] ) ) : ?>
+                                <span class="hostney-check-fail"><?php echo esc_html( $hostney_layout_messages[ $hostney_layout['problem'] ] ); ?></span>
                             <?php endif; ?>
                         </td>
                     </tr>

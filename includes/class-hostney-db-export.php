@@ -31,6 +31,67 @@ class Hostney_DB_Export {
     private $unique_keys = array();
 
     /**
+     * Table prefixes of OTHER WordPress sites that share this database (1.0.7).
+     *
+     * Several sites in one database is common on shared hosting (wp_, wp2_,
+     * blog_ ...). A prefix counts as another site when it has its own options,
+     * posts AND users tables - the sites of a multisite network (wp_2_options,
+     * wp_2_posts) have no users table of their own, so they stay part of this one.
+     *
+     * The table list still names every table; the Hostney worker leaves these
+     * sites' tables out by the same rule (queues/migration_source_checks.js in
+     * the worker - change the two together).
+     *
+     * @param string[] $names      Every table in the database.
+     * @param string   $own_prefix This site's base prefix ($wpdb->base_prefix).
+     * @return string[] Sorted, without duplicates.
+     */
+    public static function other_install_prefixes( $names, $own_prefix ) {
+        $set = array_flip( $names );
+
+        // Nothing to tell apart without this site's own tables.
+        if ( ! isset( $set[ $own_prefix . 'options' ] ) ) {
+            return array();
+        }
+
+        $prefixes = array();
+        foreach ( $names as $name ) {
+            if ( strlen( $name ) <= 7 || 'options' !== substr( $name, -7 ) ) {
+                continue;
+            }
+            $prefix = substr( $name, 0, -7 );
+            if ( $prefix !== $own_prefix && isset( $set[ $prefix . 'posts' ], $set[ $prefix . 'users' ] ) ) {
+                $prefixes[] = $prefix;
+            }
+        }
+
+        $prefixes = array_values( array_unique( $prefixes ) );
+        sort( $prefixes, SORT_STRING );
+
+        return $prefixes;
+    }
+
+    /**
+     * Does a table belong to another site in this database? The longest prefix it
+     * starts with decides - this site's or another site's - so wp_old_options is
+     * another site's when wp_old_ is one, even though it starts with wp_ too.
+     *
+     * @param string   $name       Table name.
+     * @param string   $own_prefix This site's base prefix.
+     * @param string[] $others     other_install_prefixes() result.
+     * @return bool
+     */
+    public static function belongs_to_other_install( $name, $own_prefix, $others ) {
+        $owner = ( '' !== $own_prefix && 0 === strpos( $name, $own_prefix ) ) ? $own_prefix : null;
+        foreach ( $others as $prefix ) {
+            if ( 0 === strpos( $name, $prefix ) && ( null === $owner || strlen( $prefix ) > strlen( $owner ) ) ) {
+                $owner = $prefix;
+            }
+        }
+        return null !== $owner && $owner !== $own_prefix;
+    }
+
+    /**
      * Get list of all tables with metadata
      *
      * @return array Table list with name, rows, size, engine, primary_key, create_statement

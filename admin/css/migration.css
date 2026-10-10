@@ -319,6 +319,11 @@
     content: "\26A0\00a0";
 }
 
+.hostney-check-note {
+    color: #545b64;
+    margin-left: 4px;
+}
+
 /* ─── Spinner ─── */
 .hostney-spinner {
     display: inline-block;

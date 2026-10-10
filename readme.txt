@@ -4,7 +4,7 @@ Tags: migration, hosting, transfer, move, import
 Requires at least: 5.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -60,11 +60,15 @@ No. The plugin only reads data — it does not modify anything on your source si
 
 = What data is sent to Hostney when I connect? =
 
-When you click Connect, the plugin sends your site URL, WordPress version, PHP version, and database/file size estimates to Hostney servers to register the migration. No file contents or database data are sent during this step. The actual data transfer only happens when you start the migration from the Hostney control panel, and it flows through authenticated REST API endpoints.
+When you click Connect, the plugin sends your site URL, WordPress version, PHP version, database/file size estimates, and whether the site is a multisite network or has moved folders to Hostney servers to register the migration. No file contents or database data are sent during this step. The actual data transfer only happens when you start the migration from the Hostney control panel, and it flows through authenticated REST API endpoints.
 
 = Does this plugin work with multisite? =
 
-No. WordPress multisite installations are not supported. The plugin will show a warning if multisite is detected.
+A multisite network with more than one site cannot be migrated with this plugin: Hostney refuses it when you connect, rather than moving one site and leaving the others behind. A network that has only one site is migrated as a single site. Contact Hostney support to move a whole network.
+
+= My wp-content folder is somewhere else. Can I still migrate? =
+
+Not with this plugin yet. It copies the WordPress folder, so a site whose content, plugins, must-use plugins or uploads folder has been moved out of the standard place (a Bedrock-style project, a renamed wp-content, a folder reached through a link, or an UPLOADS setting) is refused when you connect, instead of arriving without its theme, plugins or media. Tools > Hostney Migration shows this under "Folders" before you connect. Contact Hostney support to move such a site.
 
 = What happens to the token when I deactivate the plugin? =
 
@@ -79,6 +83,23 @@ No. When the migration completes, fails for good or is cancelled, and when its t
 Yes. The plugin supports optional base64 encoding of request and response bodies to prevent WAF false positives on SQL or PHP content in migration data. This is handled automatically by the Hostney worker.
 
 == Changelog ==
+
+= 1.0.7 =
+* Fixed: files whose name contains two dots in a row (for example "Wait...what.jpg" or
+  "report..old.pdf") were refused by the file reader and never reached Hostney. Only a
+  ".." folder step is refused now.
+* Changed: the file list can now be sent in pages. A very large site, or one on a slow
+  disk or behind a proxy with a short timeout, no longer has to list every file in a
+  single request.
+* Changed: the plugin asks WordPress for the memory limit the admin area gets while it
+  serves the migration, where your host allows it.
+* Changed: tables of other WordPress sites that share your database are no longer counted
+  as part of your site's database size.
+* Added: when you connect, Hostney is told whether your site is a multisite network and
+  whether its folders are in the standard place. A network with more than one site, or a
+  site whose wp-content, plugins or uploads folder has been moved, is refused at that
+  point instead of being migrated incomplete. The system requirements panel shows both
+  before you connect.
 
 = 1.0.6 =
 * Fixed: a plugin or theme that keeps part of its own code in a folder named cache,
@@ -147,6 +168,9 @@ Yes. The plugin supports optional base64 encoding of request and response bodies
 
 == Upgrade Notice ==
 
+= 1.0.7 =
+Copies files with two dots in their name, sends the file list of large sites in pages, and tells you at Connect when a multisite network or moved folders cannot be migrated. Update before you migrate.
+
 = 1.0.6 =
 Fixes migrated sites that failed to load because part of a plugin (for example Smush or Elementor) was not copied. Update before you migrate.
 
@@ -178,6 +202,7 @@ This plugin sends the following data to Hostney servers (api.hostney.com) when y
 * Number of database tables and total database size
 * Number of files and total file size
 * Active theme name and active plugin count
+* The plugin's version, whether the site is a multisite network and how many sites it has, and whether its content, plugins and uploads folders are in the standard place (a yes or a short reason, never a folder path)
 
 This data is used solely to register and plan the migration. No file contents, database rows, passwords, or personal data are transmitted during the connection step.
 

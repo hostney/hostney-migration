@@ -37,9 +37,19 @@ class Hostney_REST_API {
         ) );
 
         register_rest_route( $namespace, '/fs/scan', array(
-            'methods'             => 'GET',
-            'callback'            => array( $this, 'scan_filesystem' ),
-            'permission_callback' => array( 'Hostney_Auth', 'validate_request' ),
+            // The whole file list in one answer (every worker before 1.0.7).
+            array(
+                'methods'             => 'GET',
+                'callback'            => array( $this, 'scan_filesystem' ),
+                'permission_callback' => array( 'Hostney_Auth', 'validate_request' ),
+            ),
+            // 1.0.7: one page at a time (Hostney_FS_Export::scan_page()). The
+            // worker asks for it only when /status lists the scan_cursor feature.
+            array(
+                'methods'             => 'POST',
+                'callback'            => array( $this, 'scan_filesystem_page' ),
+                'permission_callback' => array( 'Hostney_Auth', 'validate_request' ),
+            ),
         ) );
 
         register_rest_route( $namespace, '/fs/read', array(
@@ -64,17 +74,40 @@ class Hostney_REST_API {
     }
 
     /**
+     * Ask WordPress for the memory limit wp-admin gets (WP_MAX_MEMORY_LIMIT, 256M
+     * unless the site sets it). A REST request runs with the front end's limit,
+     * and a page of rows, a file list or a file chunk is the heaviest work this
+     * plugin does. Where the host does not let PHP change its limit, nothing
+     * changes.
+     */
+    private function raise_memory_limit() {
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'hostney_migration' );
+        }
+    }
+
+    /**
      * GET /status - Health check
+     *
+     * 1.0.7 adds what the worker checks before it copies anything: the site's
+     * folder layout, whether it is a multisite network, the other WordPress
+     * sites that share its database, and the features this version serves.
      */
     public function get_status( $request ) {
         $this->set_nocache_headers();
         global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the live table list, caching not applicable
+        $table_names = $wpdb->get_col( 'SHOW TABLES' );
         return rest_ensure_response( array(
-            'success'      => true,
-            'version'      => HOSTNEY_MIGRATION_VERSION,
-            'php'          => PHP_VERSION,
-            'wp'           => get_bloginfo( 'version' ),
-            'table_prefix' => $wpdb->prefix,
+            'success'        => true,
+            'version'        => HOSTNEY_MIGRATION_VERSION,
+            'php'            => PHP_VERSION,
+            'wp'             => get_bloginfo( 'version' ),
+            'table_prefix'   => $wpdb->prefix,
+            'layout'         => Hostney_FS_Export::layout(),
+            'multisite'      => Hostney_Metadata::multisite_info(),
+            'other_installs' => Hostney_DB_Export::other_install_prefixes( is_array( $table_names ) ? $table_names : array(), $wpdb->base_prefix ),
+            'features'       => array( 'scan_cursor' ),
         ) );
     }
 
@@ -83,6 +116,7 @@ class Hostney_REST_API {
      */
     public function get_db_tables( $request ) {
         $this->set_nocache_headers();
+        $this->raise_memory_limit();
         $db_export = new Hostney_DB_Export();
         $tables = $db_export->get_tables();
 
@@ -102,6 +136,7 @@ class Hostney_REST_API {
      */
     public function get_db_rows( $request ) {
         $this->set_nocache_headers();
+        $this->raise_memory_limit();
         $table   = $request->get_param( 'table' );
         $last_id = intval( $request->get_param( 'last_id' ) );
         $limit   = intval( $request->get_param( 'limit' ) );
@@ -121,7 +156,10 @@ class Hostney_REST_API {
 
         $db_export = new Hostney_DB_Export();
 
-        // Try the requested batch size, halve on memory errors
+        // Try the requested batch size, halving it when the export throws. PHP
+        // running out of memory is NOT one of those: it is a fatal error that
+        // ends the request on the spot and no catch ever sees it. The Hostney
+        // worker answers that one itself, by asking again for fewer rows.
         $attempts = 0;
         while ( $attempts < 3 ) {
             $attempts++;
@@ -134,7 +172,7 @@ class Hostney_REST_API {
 
                 return rest_ensure_response( $result );
             } catch ( \Throwable $e ) {
-                // On memory or fatal errors, halve the batch size and retry
+                // An exception thrown by the export: halve the batch size and retry
                 if ( $limit <= 50 ) {
                     // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- intentional server-side logging for migration export failures
                     error_log( '[Hostney Migration] Row export error: ' . $e->getMessage() );
@@ -152,6 +190,7 @@ class Hostney_REST_API {
      */
     public function scan_filesystem( $request ) {
         $this->set_nocache_headers();
+        $this->raise_memory_limit();
         $fs_export = new Hostney_FS_Export();
         $files = $fs_export->scan();
 
@@ -166,11 +205,51 @@ class Hostney_REST_API {
     }
 
     /**
+     * POST /fs/scan - One page of the file list (1.0.7)
+     * Body: { cursor, limit }
+     *
+     * `cursor` is '' for the first page, then the previous answer's
+     * next_cursor; the answer says `done` once the walk is over. `skipped`
+     * describes this page only.
+     */
+    public function scan_filesystem_page( $request ) {
+        $this->set_nocache_headers();
+        $this->raise_memory_limit();
+        $cursor = $request->get_param( 'cursor' );
+        $limit  = intval( $request->get_param( 'limit' ) );
+
+        if ( null !== $cursor && ! is_string( $cursor ) ) {
+            return new WP_Error( 'invalid_cursor', __( 'Invalid paging cursor.', 'hostney-migration' ), array( 'status' => 400 ) );
+        }
+
+        if ( $limit <= 0 ) {
+            $limit = Hostney_FS_Export::SCAN_PAGE_DEFAULT;
+        }
+
+        $fs_export = new Hostney_FS_Export();
+        $page = $fs_export->scan_page( null === $cursor ? '' : $cursor, $limit );
+
+        if ( is_wp_error( $page ) ) {
+            return $page;
+        }
+
+        return rest_ensure_response( array(
+            'success'     => true,
+            'files'       => $page['files'],
+            'done'        => $page['done'],
+            'next_cursor' => $page['next_cursor'],
+            'truncated'   => false,
+            'skipped'     => $fs_export->skipped(),
+        ) );
+    }
+
+    /**
      * POST /fs/read - Read a file chunk
      * Body: { path, offset, length }
      */
     public function read_file_chunk( $request ) {
         $this->set_nocache_headers();
+        $this->raise_memory_limit();
         $file_path = $request->get_param( 'path' );
         $offset    = intval( $request->get_param( 'offset' ) );
         $length    = intval( $request->get_param( 'length' ) );
