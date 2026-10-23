@@ -111,12 +111,11 @@ File content is read in chunks of up to 5MB per request. Each chunk response inc
 
 ## Installation
 
-Download the plugin ZIP from your [Hostney control panel](https://www.hostney.com) or from the [releases page](https://github.com/hostney/hostney-migration/releases).
+The plugin is in the WordPress.org directory: in your WordPress admin go to Plugins > Add New, search for "Hostney Migration", then click Install Now and Activate. Or download the ZIP from the [releases page](https://github.com/hostney/hostney-migration/releases) and upload it under Plugins > Add New > Upload Plugin.
 
-1. In your WordPress admin go to Plugins > Add New > Upload Plugin
-2. Upload the ZIP and activate the plugin
-3. Go to Tools > Hostney Migration
-4. Paste your migration token and click Connect
+Then go to Tools > Hostney Migration, paste your migration token and click Connect.
+
+No Hostney account yet? The token comes from the Hostney control panel, and the 14-day free trial (no credit card) is enough to run a migration - [see the plans](https://www.hostney.com/pricing).
 
 ## Configuration
 

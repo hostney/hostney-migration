@@ -8,11 +8,17 @@ Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Migrate your WordPress site to Hostney hosting. Paste your migration token and Hostney handles the rest automatically.
+Move your WordPress site to Hostney. Paste a migration token and Hostney copies your site while your current one keeps running.
 
 == Description ==
 
 Hostney Migration connects your WordPress site to the Hostney hosting platform so the Hostney worker can pull your database and files automatically. No SSH access, FTP credentials, or manual exports required. Your source site stays fully operational throughout the process.
+
+**New to Hostney?**
+
+Hostney is managed hosting for WordPress, with bot protection, daily backups and the Ellie AI assistant on every plan. You can try it free for 14 days with no credit card, and this plugin works on the trial: add your site's domain in the Hostney control panel, and the copy lands on a temporary Hostney address while your current site keeps serving visitors. Nothing changes for them until you point your domain at Hostney. On paid plans, Hostney's team will also run the migration for you at no extra cost.
+
+[See the plans and the free trial](https://www.hostney.com/pricing) · [How the plugin migration works](https://www.hostney.com/migrate/wordpress-plugin)
 
 **How it works:**
 
@@ -43,10 +49,11 @@ All requests from the Hostney worker are authenticated using HMAC-SHA256 signatu
 
 == Installation ==
 
-1. In your WordPress admin go to Plugins > Add New > Upload Plugin
-2. Upload the ZIP file and activate the plugin
-3. Go to Tools > Hostney Migration
-4. Paste your migration token from the Hostney control panel and click Connect
+1. In your WordPress admin go to Plugins > Add New, search for "Hostney Migration", then click Install Now and Activate
+2. Go to Tools > Hostney Migration
+3. Paste your migration token from the Hostney control panel and click Connect
+
+No Hostney account yet? The token comes from the Hostney control panel, and the 14-day free trial (no credit card) is enough to run a migration.
 
 == Frequently Asked Questions ==
 
@@ -56,7 +63,7 @@ No. The plugin exposes authenticated REST API endpoints that the Hostney worker 
 
 = Will my site go down during migration? =
 
-No. The plugin only reads data — it does not modify anything on your source site. Your site continues to operate normally throughout the migration.
+No. The plugin only reads your site's files and database. The one thing it ever writes is its own connection token, which it deletes when the migration is over. Your site continues to operate normally throughout the migration.
 
 = What data is sent to Hostney when I connect? =
 
@@ -64,7 +71,7 @@ When you click Connect, the plugin sends your site URL, WordPress version, PHP v
 
 = Does this plugin work with multisite? =
 
-A multisite network with more than one site cannot be migrated with this plugin: Hostney refuses it when you connect, rather than moving one site and leaving the others behind. A network that has only one site is migrated as a single site. Contact Hostney support to move a whole network.
+A multisite network with more than one site cannot be migrated with this plugin: Hostney refuses it when you connect, rather than moving one site and leaving the others behind. A network that has only one site is migrated as a single site. Hostney does not host multisite networks.
 
 = My wp-content folder is somewhere else. Can I still migrate? =
 
@@ -208,4 +215,4 @@ This data is used solely to register and plan the migration. No file contents, d
 
 During an active migration (initiated from the Hostney control panel), the Hostney worker connects to your site's REST API endpoints to read database tables and files. All requests are authenticated with HMAC-SHA256 signatures. Data is transferred over HTTPS.
 
-For more information, see the [Hostney Privacy Policy](https://www.hostney.com/documents/privacy-policy).
+For more information, see the [Hostney Privacy Policy](https://www.hostney.com/documents/privacy-policy) and the [Hostney Terms of Service](https://www.hostney.com/documents/terms-of-service).
